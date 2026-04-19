@@ -1,13 +1,19 @@
+import type { MarkdownPatchHunk } from '@lobechat/markdown-patch';
+
 export const AgentDocumentsIdentifier = 'lobe-agent-documents';
 
 export const AgentDocumentsApiName = {
   createDocument: 'createDocument',
   copyDocument: 'copyDocument',
   editDocument: 'editDocument',
+  listDocuments: 'listDocuments',
+  patchDocument: 'patchDocument',
   readDocument: 'readDocument',
+  readDocumentByFilename: 'readDocumentByFilename',
   removeDocument: 'removeDocument',
   renameDocument: 'renameDocument',
   updateLoadRule: 'updateLoadRule',
+  upsertDocumentByFilename: 'upsertDocumentByFilename',
 } as const;
 
 export interface CreateDocumentArgs {
@@ -37,6 +43,17 @@ export interface EditDocumentArgs {
 export interface EditDocumentState {
   id: string;
   updated: boolean;
+}
+
+export interface PatchDocumentArgs {
+  hunks: MarkdownPatchHunk[];
+  id: string;
+}
+
+export interface PatchDocumentState {
+  applied: number;
+  id: string;
+  patched: boolean;
 }
 
 export interface RemoveDocumentArgs {
@@ -102,4 +119,32 @@ export interface LoadRuleScope {
 export interface AgentDocumentReference {
   id: string;
   title?: string;
+}
+
+export interface ListDocumentsArgs {}
+
+export interface ListDocumentsState {
+  documents: { filename: string; id: string; title?: string }[];
+}
+
+export interface ReadDocumentByFilenameArgs {
+  filename: string;
+}
+
+export interface ReadDocumentByFilenameState {
+  content?: string;
+  filename: string;
+  id: string;
+  title?: string;
+}
+
+export interface UpsertDocumentByFilenameArgs {
+  content: string;
+  filename: string;
+}
+
+export interface UpsertDocumentByFilenameState {
+  created: boolean;
+  filename: string;
+  id: string;
 }

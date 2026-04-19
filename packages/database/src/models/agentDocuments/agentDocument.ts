@@ -78,6 +78,8 @@ export class AgentDocumentModel {
       policyLoadFormat,
       policyLoadPosition: settings.policyLoadPosition,
       policyLoadRule: settings.policyLoadRule,
+      source: doc.source ?? null,
+      sourceType: doc.sourceType,
       templateId: settings.templateId ?? null,
       title: doc.title ?? doc.filename ?? '',
       updatedAt: settings.updatedAt,
@@ -85,23 +87,81 @@ export class AgentDocumentModel {
     };
   }
 
+  async associate(params: {
+    agentId: string;
+    documentId: string;
+    policyLoad?: PolicyLoad;
+  }): Promise<{ id: string }> {
+    const { agentId, documentId, policyLoad } = params;
+
+    // Verify the document belongs to the current user
+    const doc = await this.db.query.documents.findFirst({
+      where: and(eq(documents.id, documentId), eq(documents.userId, this.userId)),
+    });
+
+    if (!doc) return { id: '' };
+
+    const [result] = await this.db
+      .insert(agentDocuments)
+      .values({
+        accessPublic: 0,
+        accessSelf:
+          AgentAccess.EXECUTE |
+          AgentAccess.LIST |
+          AgentAccess.READ |
+          AgentAccess.WRITE |
+          AgentAccess.DELETE,
+        accessShared: 0,
+        agentId,
+        documentId,
+        policyLoad: policyLoad ?? PolicyLoad.PROGRESSIVE,
+        policyLoadFormat: DocumentLoadFormat.RAW,
+        policyLoadPosition: DocumentLoadPosition.BEFORE_FIRST_USER,
+        policyLoadRule: DocumentLoadRule.ALWAYS,
+        userId: this.userId,
+      })
+      .onConflictDoNothing()
+      .returning({ id: agentDocuments.id });
+
+    return { id: result?.id };
+  }
+
   async create(
     agentId: string,
     filename: string,
     content: string,
-    loadPosition?: DocumentLoadPosition,
-    loadRules?: DocumentLoadRules,
-    templateId?: string,
-    metadata?: Record<string, any>,
-    policy?: AgentDocumentPolicy,
+    params?: {
+      createdAt?: Date;
+      loadPosition?: DocumentLoadPosition;
+      loadRules?: DocumentLoadRules;
+      metadata?: Record<string, any>;
+      policy?: AgentDocumentPolicy;
+      policyLoad?: PolicyLoad;
+      templateId?: string;
+      title?: string;
+      updatedAt?: Date;
+    },
   ): Promise<AgentDocument> {
-    const title = filename.replace(/\.[^.]+$/, '');
+    const {
+      createdAt,
+      loadPosition,
+      loadRules,
+      metadata,
+      policy,
+      policyLoad,
+      templateId,
+      title: providedTitle,
+      updatedAt,
+    } = params ?? {};
+
+    const title = providedTitle?.trim() || filename.replace(/\.[^.]+$/, '');
     const stats = this.getDocumentStats(content);
     const normalizedPolicy = normalizePolicy(loadPosition, loadRules, policy);
 
     return this.db.transaction(async (trx) => {
       const documentPayload: NewDocument = {
         content,
+        createdAt,
         description: metadata?.description,
         fileType: 'agent/document',
         filename,
@@ -111,6 +171,7 @@ export class AgentDocumentModel {
         title,
         totalCharCount: stats.totalCharCount,
         totalLineCount: stats.totalLineCount,
+        updatedAt: updatedAt ?? createdAt,
         userId: this.userId,
       };
 
@@ -126,7 +187,8 @@ export class AgentDocumentModel {
           AgentAccess.DELETE,
         accessShared: 0,
         agentId,
-        policyLoad: PolicyLoad.ALWAYS,
+        createdAt,
+        policyLoad: policyLoad ?? PolicyLoad.PROGRESSIVE,
         deleteReason: null,
         deletedAt: null,
         deletedByAgentId: null,
@@ -138,6 +200,7 @@ export class AgentDocumentModel {
           normalizedPolicy.context?.position || DocumentLoadPosition.BEFORE_FIRST_USER,
         policyLoadRule: normalizedPolicy.context?.rule || DocumentLoadRule.ALWAYS,
         templateId,
+        updatedAt: updatedAt ?? createdAt,
         userId: this.userId,
       };
 
@@ -149,12 +212,17 @@ export class AgentDocumentModel {
 
   async update(
     documentId: string,
-    content?: string,
-    loadPosition?: DocumentLoadPosition,
-    loadRules?: Partial<DocumentLoadRules>,
-    metadata?: Record<string, any>,
-    policy?: AgentDocumentPolicy,
+    params?: {
+      content?: string;
+      loadPosition?: DocumentLoadPosition;
+      loadRules?: Partial<DocumentLoadRules>;
+      metadata?: Record<string, any>;
+      policy?: AgentDocumentPolicy;
+      policyLoad?: PolicyLoad;
+    },
   ): Promise<void> {
+    const { content, loadPosition, loadRules, metadata, policy, policyLoad } = params ?? {};
+
     const existing = await this.findById(documentId);
 
     if (!existing) return;
@@ -185,6 +253,7 @@ export class AgentDocumentModel {
       policyLoadFormat: mergedPolicy.context?.policyLoadFormat || DocumentLoadFormat.RAW,
       policyLoadPosition: mergedPolicy.context?.position || DocumentLoadPosition.BEFORE_FIRST_USER,
       policyLoadRule: mergedPolicy.context?.rule || DocumentLoadRule.ALWAYS,
+      ...(policyLoad !== undefined && { policyLoad }),
     };
 
     await this.db.transaction(async (trx) => {
@@ -223,7 +292,7 @@ export class AgentDocumentModel {
     const title = newTitle.trim();
     if (!title) return existing;
 
-    const filename = buildDocumentFilename(title, existing.filename);
+    const filename = buildDocumentFilename(title);
     const source = `agent-document://${existing.agentId}/${encodeURIComponent(filename)}`;
 
     await this.db
@@ -244,20 +313,20 @@ export class AgentDocumentModel {
 
     const title = newTitle?.trim();
     const filename = title
-      ? buildDocumentFilename(title, existing.filename)
+      ? buildDocumentFilename(title)
       : `copy-${Date.now()}-${existing.filename}`;
 
-    return this.create(
-      existing.agentId,
-      filename,
-      existing.content,
-      (existing.policy?.context?.position as DocumentLoadPosition | undefined) ||
+    return this.create(existing.agentId, filename, existing.content, {
+      title,
+      loadPosition:
+        (existing.policy?.context?.position as DocumentLoadPosition | undefined) ||
         DocumentLoadPosition.BEFORE_FIRST_USER,
-      parseLoadRules(existing),
-      existing.templateId || undefined,
-      existing.metadata || undefined,
-      existing.policy || undefined,
-    );
+      loadRules: parseLoadRules(existing),
+      metadata: existing.metadata || undefined,
+      policy: existing.policy || undefined,
+      policyLoad: existing.policyLoad as PolicyLoad | undefined,
+      templateId: existing.templateId || undefined,
+    });
   }
 
   async updateToolLoadRule(
@@ -266,7 +335,7 @@ export class AgentDocumentModel {
   ): Promise<AgentDocument | undefined> {
     const existing = await this.findById(documentId);
     if (!existing) return undefined;
-    const composedPolicy = composeToolPolicyUpdate(existing.policy, rule);
+    const composedPolicy = composeToolPolicyUpdate(existing.policy, rule, existing.policyLoad);
 
     await this.db
       .update(agentDocuments)
@@ -310,12 +379,28 @@ export class AgentDocumentModel {
     agentId: string,
     filename: string,
     content: string,
-    loadPosition?: DocumentLoadPosition,
-    loadRules?: DocumentLoadRules,
-    templateId?: string,
-    metadata?: Record<string, any>,
-    policy?: AgentDocumentPolicy,
+    params?: {
+      createdAt?: Date;
+      loadPosition?: DocumentLoadPosition;
+      loadRules?: DocumentLoadRules;
+      metadata?: Record<string, any>;
+      policy?: AgentDocumentPolicy;
+      policyLoad?: PolicyLoad;
+      templateId?: string;
+      updatedAt?: Date;
+    },
   ): Promise<AgentDocument> {
+    const {
+      createdAt,
+      loadPosition,
+      loadRules,
+      metadata,
+      policy,
+      policyLoad,
+      templateId,
+      updatedAt,
+    } = params ?? {};
+
     const existing = await this.findByFilename(agentId, filename);
 
     if (existing) {
@@ -325,21 +410,28 @@ export class AgentDocumentModel {
         ? { ...existing.metadata, ...metadata }
         : (existing.metadata ?? undefined);
 
-      await this.update(existing.id, content, loadPosition, mergedRules, mergedMetadata, policy);
+      await this.update(existing.id, {
+        content,
+        loadPosition,
+        loadRules: mergedRules,
+        metadata: mergedMetadata,
+        policy,
+        policyLoad,
+      });
 
       return (await this.findByFilename(agentId, filename))!;
     }
 
-    return this.create(
-      agentId,
-      filename,
-      content,
+    return this.create(agentId, filename, content, {
+      createdAt,
       loadPosition,
       loadRules,
-      templateId,
       metadata,
       policy,
-    );
+      policyLoad,
+      templateId,
+      updatedAt,
+    });
   }
 
   async findByAgent(agentId: string): Promise<AgentDocumentWithRules[]> {

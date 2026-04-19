@@ -12,6 +12,8 @@ import NavItem from '@/features/NavPanel/components/NavItem';
 import { useQueryRoute } from '@/hooks/useQueryRoute';
 import { usePathname } from '@/libs/router/navigation';
 import { useActionSWR } from '@/libs/swr';
+import { useAgentStore } from '@/store/agent';
+import { agentSelectors } from '@/store/agent/selectors';
 import { useChatStore } from '@/store/chat';
 import { useGlobalStore } from '@/store/global';
 import { featureFlagsSelectors, useServerConfigStore } from '@/store/serverConfig';
@@ -23,18 +25,20 @@ const Nav = memo(() => {
   const agentId = params.aid;
   const pathname = usePathname();
   const isProfileActive = pathname.includes('/profile');
-  const isIntegrationActive = pathname.includes('/channel');
+  const isChannelActive = pathname.includes('/channel');
   const router = useQueryRoute();
   const { isAgentEditable } = useServerConfigStore(featureFlagsSelectors);
   const toggleCommandMenu = useGlobalStore((s) => s.toggleCommandMenu);
+  const isHeterogeneousAgent = useAgentStore(agentSelectors.isCurrentAgentHeterogeneous);
   const hideProfile = !isAgentEditable;
+  const hideChannel = hideProfile || isHeterogeneousAgent;
   const switchTopic = useChatStore((s) => s.switchTopic);
   const [openNewTopicOrSaveTopic] = useChatStore((s) => [s.openNewTopicOrSaveTopic]);
 
   const { mutate } = useActionSWR('openNewTopicOrSaveTopic', openNewTopicOrSaveTopic);
   const handleNewTopic = () => {
     // If in agent sub-route, navigate back to agent chat first
-    if (isProfileActive && agentId) {
+    if ((isProfileActive || isChannelActive) && agentId) {
       router.push(urlJoin('/agent', agentId));
     }
     mutate();
@@ -58,9 +62,9 @@ const Nav = memo(() => {
           }}
         />
       )}
-      {!hideProfile && (
+      {!hideChannel && (
         <NavItem
-          active={isIntegrationActive}
+          active={isChannelActive}
           icon={RadioTowerIcon}
           title={t('tab.integration')}
           onClick={() => {

@@ -22,6 +22,8 @@ export {
 // Type-only exports (interfaces)
 export type { AgentDocumentPolicy, DocumentLoadRules } from '@lobechat/agent-templates';
 
+export type AgentDocumentSourceType = 'file' | 'web' | 'api' | 'topic';
+
 export interface AgentDocument {
   accessPublic: number;
   accessSelf: number;
@@ -43,6 +45,8 @@ export interface AgentDocument {
   policyLoadFormat: DocumentLoadFormat;
   policyLoadPosition: string;
   policyLoadRule: string;
+  source: string | null;
+  sourceType: AgentDocumentSourceType;
   templateId: string | null;
   title: string;
   updatedAt: Date;
@@ -58,7 +62,7 @@ export interface ToolUpdateLoadRule {
   keywords?: string[];
   maxDocuments?: number;
   maxTokens?: number;
-  mode?: 'always' | 'manual' | 'on-demand';
+  mode?: 'always' | 'manual' | 'on-demand' | 'progressive';
   pinnedDocumentIds?: string[];
   policyLoadFormat?: 'file' | 'raw';
   priority?: number;

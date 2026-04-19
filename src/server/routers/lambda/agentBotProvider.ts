@@ -63,7 +63,7 @@ export const agentBotProviderRouter = router({
       // Stop running client and invalidate cached bot
       if (existing) {
         const service = new GatewayService();
-        await service.stopClient(existing.platform, existing.applicationId);
+        await service.stopClient(existing.platform, existing.applicationId, ctx.userId);
         await getBotMessageRouter().invalidateBot(existing.platform, existing.applicationId);
       }
 
@@ -73,13 +73,37 @@ export const agentBotProviderRouter = router({
   getByAgentId: agentBotProviderProcedure
     .input(z.object({ agentId: z.string() }))
     .query(async ({ input, ctx }) => {
-      return ctx.agentBotProviderModel.findByAgentId(input.agentId);
+      const providers = await ctx.agentBotProviderModel.findByAgentId(input.agentId);
+
+      const statuses = await Promise.all(
+        providers.map((p) => getBotRuntimeStatus(p.platform, p.applicationId)),
+      );
+
+      return providers.map((p, i) => ({
+        ...p,
+        runtimeStatus: statuses[i].status,
+      }));
     }),
 
   getRuntimeStatus: authedProcedure
     .input(z.object({ applicationId: z.string(), platform: z.string() }))
     .query(async ({ input }) => {
       return getBotRuntimeStatus(input.platform, input.applicationId);
+    }),
+
+  refreshRuntimeStatus: authedProcedure
+    .input(z.object({ applicationId: z.string(), platform: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const service = new GatewayService();
+      return service.refreshBotRuntimeStatus(input.platform, input.applicationId, ctx.userId);
+    }),
+
+  refreshRuntimeStatusesByAgent: authedProcedure
+    .input(z.object({ agentId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const service = new GatewayService();
+      await service.refreshBotRuntimeStatusesByAgent(input.agentId, ctx.userId);
+      return { ok: true as const };
     }),
 
   list: agentBotProviderProcedure
@@ -92,16 +116,16 @@ export const agentBotProviderRouter = router({
         .optional(),
     )
     .query(async ({ input, ctx }) => {
-      return ctx.agentBotProviderModel.query(input);
-    }),
+      const providers = await ctx.agentBotProviderModel.query(input);
 
-  listRuntimeStatuses: agentBotProviderProcedure
-    .input(z.object({ agentId: z.string() }))
-    .query(async ({ input, ctx }) => {
-      const providers = await ctx.agentBotProviderModel.findByAgentId(input.agentId);
-      return Promise.all(
-        providers.map((provider) => getBotRuntimeStatus(provider.platform, provider.applicationId)),
+      const statuses = await Promise.all(
+        providers.map((p) => getBotRuntimeStatus(p.platform, p.applicationId)),
       );
+
+      return providers.map((p, i) => ({
+        ...p,
+        runtimeStatus: statuses[i].status,
+      }));
     }),
 
   connectBot: agentBotProviderProcedure
@@ -140,6 +164,7 @@ export const agentBotProviderRouter = router({
         provider.credentials,
         (provider.settings as Record<string, unknown>) || {},
         applicationId,
+        platform,
       );
 
       if (!result.valid) {
@@ -191,7 +216,7 @@ export const agentBotProviderRouter = router({
 
         if (shouldStopRuntime) {
           const service = new GatewayService();
-          await service.stopClient(existing.platform, existing.applicationId);
+          await service.stopClient(existing.platform, existing.applicationId, ctx.userId);
         }
 
         await getBotMessageRouter().invalidateBot(existing.platform, existing.applicationId);

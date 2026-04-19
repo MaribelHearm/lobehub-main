@@ -1,17 +1,34 @@
+import { applyMarkdownPatch, formatMarkdownPatchError } from '@lobechat/markdown-patch';
 import type { BuiltinServerRuntimeOutput } from '@lobechat/types';
 
 import type {
   CopyDocumentArgs,
   CreateDocumentArgs,
   EditDocumentArgs,
+  ListDocumentsArgs,
+  PatchDocumentArgs,
   ReadDocumentArgs,
+  ReadDocumentByFilenameArgs,
   RemoveDocumentArgs,
   RenameDocumentArgs,
   UpdateLoadRuleArgs,
+  UpsertDocumentByFilenameArgs,
 } from '../types';
 
 interface AgentDocumentRecord {
   content?: string;
+  /**
+   * The underlying `documents` table id. Used for portal rendering
+   * (opening the document in the shared EditorCanvas), which must resolve
+   * the row in `documents` — distinct from `id` which is the
+   * `agentDocuments` association row id.
+   */
+  documentId?: string;
+  filename?: string;
+  /**
+   * The `agentDocuments` association row id. This is what the LLM receives
+   * and uses for subsequent operations (read/edit/remove/...).
+   */
   id: string;
   title?: string;
 }
@@ -36,8 +53,18 @@ export interface AgentDocumentsRuntimeService {
       agentId: string;
     },
   ) => Promise<AgentDocumentRecord | undefined>;
+  listDocuments: (
+    params: ListDocumentsArgs & {
+      agentId: string;
+    },
+  ) => Promise<AgentDocumentRecord[]>;
   readDocument: (
     params: ReadDocumentArgs & {
+      agentId: string;
+    },
+  ) => Promise<AgentDocumentRecord | undefined>;
+  readDocumentByFilename: (
+    params: ReadDocumentByFilenameArgs & {
       agentId: string;
     },
   ) => Promise<AgentDocumentRecord | undefined>;
@@ -56,6 +83,11 @@ export interface AgentDocumentsRuntimeService {
       agentId: string;
     },
   ) => Promise<AgentDocumentRecord | undefined>;
+  upsertDocumentByFilename: (
+    params: UpsertDocumentByFilenameArgs & {
+      agentId: string;
+    },
+  ) => Promise<AgentDocumentRecord | undefined>;
 }
 
 export class AgentDocumentsExecutionRuntime {
@@ -64,6 +96,76 @@ export class AgentDocumentsExecutionRuntime {
   private resolveAgentId(context?: AgentDocumentOperationContext) {
     if (!context?.agentId) return;
     return context.agentId;
+  }
+
+  async listDocuments(
+    _args: ListDocumentsArgs,
+    context?: AgentDocumentOperationContext,
+  ): Promise<BuiltinServerRuntimeOutput> {
+    const agentId = this.resolveAgentId(context);
+    if (!agentId) {
+      return {
+        content: 'Cannot list agent documents without agentId context.',
+        success: false,
+      };
+    }
+
+    const docs = await this.service.listDocuments({ agentId });
+    const list = docs.map((d) => ({
+      filename: d.filename ?? d.title ?? '',
+      id: d.id,
+      title: d.title,
+    }));
+
+    return {
+      content: JSON.stringify(list),
+      state: { documents: list },
+      success: true,
+    };
+  }
+
+  async readDocumentByFilename(
+    args: ReadDocumentByFilenameArgs,
+    context?: AgentDocumentOperationContext,
+  ): Promise<BuiltinServerRuntimeOutput> {
+    const agentId = this.resolveAgentId(context);
+    if (!agentId) {
+      return {
+        content: 'Cannot read agent document without agentId context.',
+        success: false,
+      };
+    }
+
+    const doc = await this.service.readDocumentByFilename({ ...args, agentId });
+    if (!doc) return { content: `Document not found: ${args.filename}`, success: false };
+
+    return {
+      content: doc.content || '',
+      state: { content: doc.content, filename: args.filename, id: doc.id, title: doc.title },
+      success: true,
+    };
+  }
+
+  async upsertDocumentByFilename(
+    args: UpsertDocumentByFilenameArgs,
+    context?: AgentDocumentOperationContext,
+  ): Promise<BuiltinServerRuntimeOutput> {
+    const agentId = this.resolveAgentId(context);
+    if (!agentId) {
+      return {
+        content: 'Cannot upsert agent document without agentId context.',
+        success: false,
+      };
+    }
+
+    const doc = await this.service.upsertDocumentByFilename({ ...args, agentId });
+    if (!doc) return { content: `Failed to upsert document: ${args.filename}`, success: false };
+
+    return {
+      content: `Upserted document "${args.filename}" (${doc.id}).`,
+      state: { filename: args.filename, id: doc.id },
+      success: true,
+    };
   }
 
   async createDocument(
@@ -83,7 +185,7 @@ export class AgentDocumentsExecutionRuntime {
 
     return {
       content: `Created document "${created.title || args.title}" (${created.id}).`,
-      state: { documentId: created.id },
+      state: { documentId: created.documentId },
       success: true,
     };
   }
@@ -128,6 +230,46 @@ export class AgentDocumentsExecutionRuntime {
     return {
       content: `Updated document ${args.id}.`,
       state: { id: args.id, updated: true },
+      success: true,
+    };
+  }
+
+  async patchDocument(
+    args: PatchDocumentArgs,
+    context?: AgentDocumentOperationContext,
+  ): Promise<BuiltinServerRuntimeOutput> {
+    const agentId = this.resolveAgentId(context);
+    if (!agentId) {
+      return {
+        content: 'Cannot patch agent document without agentId context.',
+        success: false,
+      };
+    }
+
+    const doc = await this.service.readDocument({ agentId, id: args.id });
+    if (!doc) return { content: `Document not found: ${args.id}`, success: false };
+
+    const patched = applyMarkdownPatch(doc.content ?? '', args.hunks);
+    if (!patched.ok) {
+      const message = formatMarkdownPatchError(patched.error);
+      return {
+        content: message,
+        error: { body: patched.error, message, type: patched.error.code },
+        state: { error: patched.error, id: args.id },
+        success: false,
+      };
+    }
+
+    const updated = await this.service.editDocument({
+      agentId,
+      content: patched.content,
+      id: args.id,
+    });
+    if (!updated) return { content: `Failed to patch document ${args.id}.`, success: false };
+
+    return {
+      content: `Patched document ${args.id}. Applied ${patched.applied} hunk(s).`,
+      state: { applied: patched.applied, id: args.id, patched: true },
       success: true,
     };
   }

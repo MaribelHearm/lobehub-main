@@ -125,16 +125,22 @@ export const formatTaskDetail = (t: TaskDetailData): string => {
     );
   }
 
-  // Subtasks
+  // Subtasks (nested tree)
   if (t.subtasks && t.subtasks.length > 0) {
     lines.push('');
     lines.push('Subtasks:');
-    for (const s of t.subtasks) {
-      const dep = s.blockedBy ? ` ← blocks: ${s.blockedBy}` : '';
-      lines.push(
-        `  ${s.identifier} ${statusIcon(s.status)} ${s.status} ${s.name || '(unnamed)'}${dep}`,
-      );
-    }
+    const renderSubtasks = (nodes: NonNullable<typeof t.subtasks>, indent: string) => {
+      for (const s of nodes) {
+        const dep = s.blockedBy ? ` ← blocks: ${s.blockedBy}` : '';
+        lines.push(
+          `${indent}${s.identifier} ${statusIcon(s.status)} ${s.status} ${s.name || '(unnamed)'}${dep}`,
+        );
+        if (s.children && s.children.length > 0) {
+          renderSubtasks(s.children, indent + '  ');
+        }
+      }
+    };
+    renderSubtasks(t.subtasks, '  ');
   }
 
   // Checkpoint
@@ -204,7 +210,12 @@ export const formatTaskDetail = (t: TaskDetailData): string => {
           `  💬 ${act.time || ''} Topic #${act.seq || '?'} ${act.title || 'Untitled'} ${statusIcon(status)} ${status}${idSuffix}`,
         );
       } else if (act.type === 'brief') {
-        const resolved = act.resolvedAction ? ` ✏️ ${act.resolvedAction}` : '';
+        const resolvedLabel = act.resolvedAction
+          ? act.resolvedComment
+            ? `${act.resolvedAction}: ${act.resolvedComment}`
+            : act.resolvedAction
+          : '';
+        const resolved = resolvedLabel ? ` ✏️ ${resolvedLabel}` : '';
         const priStr = act.priority ? ` [${act.priority}]` : '';
         lines.push(
           `  ${briefIcon(act.briefType || '')} ${act.time || ''} Brief [${act.briefType}] ${act.title}${priStr}${resolved}${idSuffix}`,
