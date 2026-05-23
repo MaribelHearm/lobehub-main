@@ -2,7 +2,6 @@ name: E2E CI
 
 on:
   workflow_dispatch: {}
-
 permissions:
   actions: write
   contents: read
