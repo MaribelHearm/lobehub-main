@@ -2,13 +2,7 @@ name: Claude Auto E2E Testing
 description: Automatically add E2E tests to improve user journey coverage
 
 on:
-  workflow_dispatch:
-    inputs:
-      target_module:
-        description: 'Specific module/feature to add E2E tests (e.g., agent/conversation, knowledge/rag)'
-        required: false
-        type: string
-
+  workflow_dispatch: {}
 concurrency:
   group: auto-e2e-testing
   cancel-in-progress: false

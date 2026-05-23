@@ -11,10 +11,7 @@ env:
   COMMIT_MESSAGE: '🤖 chore: Lighthouse Results Refreshed'
 
 on:
-  schedule:
-    - cron: '0 0 * * *' # every day
-  workflow_dispatch:
-
+  workflow_dispatch: {}
 jobs:
   lighthouse-badger-advanced:
     name: ${{ matrix.NAME }}

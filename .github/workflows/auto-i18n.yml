@@ -2,8 +2,6 @@ name: Daily i18n Update
 
 on:
   workflow_dispatch: {}
-
-# Add permissions configuration
 permissions:
   contents: write
   pull-requests: write

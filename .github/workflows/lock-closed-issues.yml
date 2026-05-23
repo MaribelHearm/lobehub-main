@@ -1,10 +1,7 @@
 name: 'Lock Stale Issues'
 
 on:
-  schedule:
-    - cron: '0 1 * * *'
-  workflow_dispatch:
-
+  workflow_dispatch: {}
 permissions:
   issues: write
 

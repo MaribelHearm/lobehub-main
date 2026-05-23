@@ -2,13 +2,7 @@ name: Claude Translate Non-English Comments
 description: Automatically detect and translate non-English comments to English in codebase
 
 on:
-  workflow_dispatch:
-    inputs:
-      target_module:
-        description: 'Specific module to translate (e.g., packages/database, apps/desktop/src/modules/auth)'
-        required: false
-        type: string
-
+  workflow_dispatch: {}
 concurrency:
   group: translate-comments
   cancel-in-progress: false

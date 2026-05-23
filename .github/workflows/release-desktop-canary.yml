@@ -17,17 +17,7 @@ name: Release Desktop Canary
 # ============================================
 
 on:
-  push:
-    branches:
-      - canary
-  workflow_dispatch:
-    inputs:
-      force:
-        description: 'Force build (skip commit message check)'
-        required: false
-        type: boolean
-        default: false
-
+  workflow_dispatch: {}
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true

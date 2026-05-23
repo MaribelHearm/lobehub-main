@@ -2,13 +2,7 @@ name: Claude Auto Testing Coverage
 description: Automatically add unit tests to improve code coverage
 
 on:
-  workflow_dispatch:
-    inputs:
-      target_module:
-        description: 'Specific module to add tests (e.g., packages/database, src/services/user)'
-        required: false
-        type: string
-
+  workflow_dispatch: {}
 concurrency:
   group: auto-testing
   cancel-in-progress: false

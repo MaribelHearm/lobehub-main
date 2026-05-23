@@ -5,13 +5,7 @@ permissions:
   id-token: write
 
 on:
-  push:
-    branches:
-      - canary
-    paths:
-      - packages/model-bank/**
   workflow_dispatch: {}
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

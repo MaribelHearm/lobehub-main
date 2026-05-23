@@ -1,15 +1,7 @@
 name: Claude Issue Dedupe
 description: Automatically dedupe GitHub issues using Claude Code
 on:
-  issues:
-    types: [opened]
-  workflow_dispatch:
-    inputs:
-      issue_number:
-        description: 'Issue number to process for duplicate detection'
-        required: true
-        type: string
-
+  workflow_dispatch: {}
 jobs:
   claude-dedupe-issues:
     runs-on: ubuntu-latest

@@ -1,37 +1,7 @@
 name: Desktop Manual Build
 
 on:
-  workflow_dispatch:
-    inputs:
-      channel:
-        description: 'Release channel for desktop build (affects version suffix and workflow:set-desktop-version)'
-        required: true
-        default: canary
-        type: choice
-        options:
-          - canary
-          - beta
-          - stable
-      build_macos:
-        description: 'Build macOS artifacts'
-        required: true
-        default: true
-        type: boolean
-      build_windows:
-        description: 'Build Windows artifacts'
-        required: true
-        default: true
-        type: boolean
-      build_linux:
-        description: 'Build Linux artifacts'
-        required: true
-        default: true
-        type: boolean
-      version:
-        description: 'Override desktop version (e.g. 1.2.3). Leave empty to auto-generate.'
-        required: false
-        default: ''
-
+  workflow_dispatch: {}
 concurrency:
   group: manual-${{ github.ref }}-${{ github.workflow }}
   cancel-in-progress: true
