@@ -19,6 +19,11 @@ const logProvider = debug('lobe-oidc:provider');
 
 export const API_AUDIENCE = 'urn:lobehub:chat';
 
+// Personal self-hosted deployment: keep desktop OIDC sessions alive for a long time.
+// Grant must be at least as long as RefreshToken, otherwise refresh_token will fail
+// once oidc-provider's default 14-day Grant expires.
+const DESKTOP_OIDC_LONG_TTL = 180 * 24 * 60 * 60; // 180 days
+
 /**
  * Get cookie keys using KEY_VAULTS_SECRET
  */
@@ -311,8 +316,9 @@ export const createOIDCProvider = async (db: LobeChatDatabase): Promise<Provider
       IdToken: 3600, // 1 hour
       Interaction: 3600, // 1 hour
 
-      RefreshToken: 30 * 24 * 60 * 60, // 30 days
-      Session: 30 * 24 * 60 * 60, // 30 days
+      Grant: DESKTOP_OIDC_LONG_TTL,
+      RefreshToken: DESKTOP_OIDC_LONG_TTL,
+      Session: DESKTOP_OIDC_LONG_TTL,
     },
   };
 

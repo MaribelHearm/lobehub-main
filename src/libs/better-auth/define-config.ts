@@ -79,6 +79,9 @@ const getPasskeyOrigins = (): string[] | undefined => {
 const MAGIC_LINK_EXPIRES_IN = 900;
 // OTP expiration time (in seconds) - 5 minutes for mobile OTP verification
 const OTP_EXPIRES_IN = 300;
+// Personal self-hosted deployment: reduce repeated browser/OAuth re-logins.
+const WEB_SESSION_EXPIRES_IN = 180 * 24 * 60 * 60; // 180 days
+const WEB_SESSION_UPDATE_AGE = 24 * 60 * 60; // 1 day
 const enableMagicLink = authEnv.AUTH_ENABLE_MAGIC_LINK;
 const enabledSSOProviders = parseSSOProviders(authEnv.AUTH_SSO_PROVIDERS);
 
@@ -180,8 +183,10 @@ export function defineConfig(customOptions: CustomBetterAuthOptions) {
         enabled: true,
         maxAge: 2 * 60, // Cache duration in seconds
       },
+      expiresIn: WEB_SESSION_EXPIRES_IN,
       // Keep a DB-backed fallback when Redis secondary storage entries are unexpectedly missing.
       storeSessionInDatabase: true,
+      updateAge: WEB_SESSION_UPDATE_AGE,
     },
     database: drizzleAdapter(serverDB, {
       provider: 'pg',
